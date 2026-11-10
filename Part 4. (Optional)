@@ -1,0 +1,57 @@
+-- OPTIONAL PART 3: FE HAT-LIMB DRIVER (MAPS EQUIPPED HATS TO YOUR CLIMBING LIMBS)
+local S = getgenv().DHC
+assert(S, "Run Part 1, 2A, and 2B first!")
+
+local P, R = game:GetService("Players"), game:GetService("RunService")
+local L, char = P.LocalPlayer, S.char
+local stripMesh = true -- Set to false if you want to keep your hats' meshes locally
+
+-- R15 Limbs to map hats onto (Hands/Forearms first, then Legs, then Upper Limbs)
+local targetLimbs = {
+	char:WaitForChild("LeftLowerArm"), char:WaitForChild("RightLowerArm"),
+	char:WaitForChild("LeftLowerLeg"), char:WaitForChild("RightLowerLeg"),
+	char:WaitForChild("LeftUpperArm"), char:WaitForChild("RightUpperArm"),
+	char:WaitForChild("LeftUpperLeg"), char:WaitForChild("RightUpperLeg")
+}
+
+local drivers = {}
+for _, acc in ipairs(char:GetChildren()) do
+	if acc:IsA("Accessory") and #drivers < #targetLimbs then
+		local h = acc:FindFirstChild("Handle")
+		if h then
+			for _, c in ipairs(h:GetChildren()) do
+				if c:IsA("Weld") or c:IsA("Motor6D") or (stripMesh and (c:IsA("SpecialMesh") or c:IsA("Mesh"))) then
+					c:Destroy()
+				end
+			end
+			h.CanCollide, h.CanQuery, h.CanTouch, h.Massless = false, false, false, true
+			local att = Instance.new("Attachment", h)
+			local ap = Instance.new("AlignPosition", h)
+			ap.Mode, ap.Attachment0 = Enum.PositionAlignmentMode.OneAttachment, att
+			ap.MaxForce, ap.MaxVelocity, ap.Responsiveness = 9e9, 500, 95
+			local ao = Instance.new("AlignOrientation", h)
+			ao.Mode, ao.Attachment0 = Enum.OrientationAlignmentMode.OneAttachment, att
+			ao.MaxTorque, ao.Responsiveness = 9e9, 95
+			table.insert(drivers, {handle = h, ap = ap, ao = ao, limb = targetLimbs[#drivers + 1]})
+		end
+	end
+end
+
+-- Keep network ownership alive & sync hats to your climbing limbs for the whole server
+local hatConn
+hatConn = R.Heartbeat:Connect(function()
+	if not char or not char.Parent or S.hum.Health <= 0 then hatConn:Disconnect() return end
+	pcall(function()
+		sethiddenproperty(L, "SimulationRadius", math.huge)
+		sethiddenproperty(L, "MaximumSimulationRadius", math.huge)
+	end)
+	for _, d in ipairs(drivers) do
+		if d.handle and d.handle.Parent and d.limb then
+			d.handle.AssemblyLinearVelocity = Vector3.new(0, 25.05, 0)
+			d.handle.AssemblyAngularVelocity = Vector3.zero
+			d.ap.Position = d.limb.Position
+			d.ao.CFrame = d.limb.CFrame
+		end
+	end
+end)
+print("Hat Reanimation Active! Mapped " .. #drivers .. " hats to your climbing limbs.")
